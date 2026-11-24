@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Firebase Android app credentials (never commit)
+android/app/google-services.json
