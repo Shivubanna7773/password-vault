@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { signInWithPopup, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithCredential, signInWithPopup, type User } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import {
   Eye,
   EyeOff,
@@ -12,7 +14,7 @@ import {
   Sun,
   Moon,
 } from 'lucide-react';
-import { auth, googleProvider } from '../firebase';
+import { auth, googleProvider, signOutFromAllLayers } from '../firebase';
 import { evaluatePasswordStrength, verifyMasterPassphrase } from '../lib/crypto';
 import { createVaultProfile } from '../lib/vaultService';
 import type { VaultProfileDoc } from '../types/vault';
@@ -46,7 +48,17 @@ export const AuthGate: React.FC<AuthGateProps> = ({
     setError(null);
     setBusy(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (Capacitor.isNativePlatform()) {
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        if (!idToken) {
+          throw new Error('Google Sign-In did not return an ID token. Check the Android Firebase configuration and SHA-1 fingerprint.');
+        }
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth, credential);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unable to sign in with Google.';
       if (msg.includes('popup-blocked')) {
@@ -124,7 +136,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({
     setError(null);
     setPassphrase('');
     setConfirmPassphrase('');
-    await signOut(auth);
+    await signOutFromAllLayers();
   };
 
   const strengthColor =
