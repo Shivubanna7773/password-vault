@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   Activity,
   Check,
@@ -27,7 +27,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import { auth } from './firebase';
+import { auth, signOutFromAllLayers } from './firebase';
 import { decryptVaultSecret } from './lib/crypto';
 import {
   deleteVaultItem,
@@ -1042,7 +1042,7 @@ function VaultWorkspace() {
             onUpdateAutoLock={(mins) => updateAutoLockPreference(user.uid, mins)}
             onImportItems={handleImportItems}
             onLockVault={handleLockVault}
-            onSignOut={() => signOut(auth)}
+            onSignOut={signOutFromAllLayers}
           />
         )}
       </main>
