@@ -1,0 +1,145 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Hardened Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedOwner(userId) {
+      return isSignedIn() && request.auth.token.email_verified == true && request.auth.uid == userId;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidVaultProfile(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'salt', 'verifierIv', 'verifierCiphertext',
+          'kdfIterations', 'autoLockMinutes', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'salt', 'verifierIv', 'verifierCiphertext',
+          'kdfIterations', 'autoLockMinutes', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.salt is string && data.salt.size() >= 16 && data.salt.size() <= 128
+        && data.verifierIv is string && data.verifierIv.size() >= 12 && data.verifierIv.size() <= 64
+        && data.verifierCiphertext is string && data.verifierCiphertext.size() >= 16 && data.verifierCiphertext.size() <= 512
+        && data.kdfIterations is int && data.kdfIterations >= 100000 && data.kdfIterations <= 1000000
+        && data.autoLockMinutes is int && data.autoLockMinutes >= 0 && data.autoLockMinutes <= 1440
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVaultItem(data, userId) {
+      return data.keys().hasAll([
+          'ownerId', 'title', 'category', 'domain', 'isFavorite',
+          'strengthScore', 'hasTotp', 'iv', 'ciphertext', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'title', 'category', 'domain', 'isFavorite',
+          'strengthScore', 'hasTotp', 'iv', 'ciphertext', 'createdAt', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId == userId && isValidId(data.ownerId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.category is string && data.category in ['login', 'banking', 'wifi', 'note', 'card']
+        && data.domain is string && data.domain.size() <= 200
+        && data.isFavorite is bool
+        && data.strengthScore is int && data.strengthScore >= 0 && data.strengthScore <= 4
+        && data.hasTotp is bool
+        && data.iv is string && data.iv.size() >= 12 && data.iv.size() <= 64
+        && data.ciphertext is string && data.ciphertext.size() >= 16 && data.ciphertext.size() <= 32000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Vault Profiles ---
+    match /vaultProfiles/{userId} {
+      allow get: if isValidId(userId) && isVerifiedOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidVaultProfile(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidVaultProfile(incoming(), userId)
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Update vault preferences (autoLockMinutes)
+          incoming().diff(existing()).affectedKeys().hasOnly(['autoLockMinutes', 'updatedAt'])
+          ||
+          // Action 2: Rotate master passphrase verifier & salt
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'salt', 'verifierIv', 'verifierCiphertext', 'kdfIterations', 'updatedAt'
+          ])
+        );
+
+      allow delete: if false;
+
+      // --- Encrypted Vault Items Subcollection ---
+      match /items/{itemId} {
+        allow get: if isValidId(userId) && isValidId(itemId)
+          && isVerifiedOwner(userId)
+          && exists(/databases/$(database)/documents/vaultProfiles/$(userId));
+
+        allow list: if isValidId(userId)
+          && isVerifiedOwner(userId)
+          && resource.data.ownerId == request.auth.uid;
+
+        allow create: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(itemId)
+          && isValidVaultItem(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/vaultProfiles/$(userId)).data.ownerId == request.auth.uid;
+
+        allow update: if isVerifiedOwner(userId)
+          && isValidId(userId)
+          && isValidId(itemId)
+          && isValidVaultItem(incoming(), userId)
+          && incoming().ownerId == existing().ownerId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && get(/databases/$(database)/documents/vaultProfiles/$(userId)).data.ownerId == request.auth.uid
+          && (
+            // Action 1: Toggle favorite pin
+            incoming().diff(existing()).affectedKeys().hasOnly(['isFavorite', 'updatedAt'])
+            ||
+            // Action 2: Edit encrypted item content and metadata
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'category', 'domain', 'isFavorite', 'strengthScore',
+              'hasTotp', 'iv', 'ciphertext', 'updatedAt'
+            ])
+          );
+
+        allow delete: if isValidId(userId) && isValidId(itemId)
+          && isVerifiedOwner(userId)
+          && get(/databases/$(database)/documents/vaultProfiles/$(userId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}

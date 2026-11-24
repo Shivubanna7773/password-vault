@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "VaultProfile": {
+      "title": "VaultProfile",
+      "description": "Zero-knowledge encryption key derivation metadata and verifier for a user's personal password vault.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the vault owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "salt": {
+          "type": "string",
+          "description": "Base64-encoded PBKDF2 salt used to derive the AES-GCM vault key locally.",
+          "minLength": 16,
+          "maxLength": 128
+        },
+        "verifierIv": {
+          "type": "string",
+          "description": "Base64-encoded AES-GCM initialization vector for the passphrase verifier.",
+          "minLength": 12,
+          "maxLength": 64
+        },
+        "verifierCiphertext": {
+          "type": "string",
+          "description": "AES-GCM ciphertext of the known verifier string used to verify master passphrase locally.",
+          "minLength": 16,
+          "maxLength": 512
+        },
+        "kdfIterations": {
+          "type": "integer",
+          "description": "Number of PBKDF2-SHA256 iterations."
+        },
+        "autoLockMinutes": {
+          "type": "integer",
+          "description": "Minutes of inactivity before locking the decrypted vault in memory."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the vault profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the vault profile was last updated."
+        }
+      },
+      "required": [
+        "ownerId",
+        "salt",
+        "verifierIv",
+        "verifierCiphertext",
+        "kdfIterations",
+        "autoLockMinutes",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "VaultItem": {
+      "title": "VaultItem",
+      "description": "An encrypted credential, card, Wi-Fi key, or secure note stored inside the owner's vault.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the item owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Display label for the vault item.",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "description": "Item category for vault filtering.",
+          "enum": ["login", "banking", "wifi", "note", "card"]
+        },
+        "domain": {
+          "type": "string",
+          "description": "Optional website hostname or service identifier.",
+          "minLength": 0,
+          "maxLength": 200
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether the item is pinned to favorites."
+        },
+        "strengthScore": {
+          "type": "integer",
+          "description": "Local password strength score from 0 to 4."
+        },
+        "hasTotp": {
+          "type": "boolean",
+          "description": "Whether the encrypted payload contains a TOTP authenticator secret."
+        },
+        "iv": {
+          "type": "string",
+          "description": "Base64-encoded AES-GCM 96-bit initialization vector.",
+          "minLength": 12,
+          "maxLength": 64
+        },
+        "ciphertext": {
+          "type": "string",
+          "description": "Base64-encoded AES-GCM encrypted payload containing username, password, url, notes, and TOTP secret.",
+          "minLength": 16,
+          "maxLength": 32000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the item was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the item was last updated."
+        }
+      },
+      "required": [
+        "ownerId",
+        "title",
+        "category",
+        "domain",
+        "isFavorite",
+        "strengthScore",
+        "hasTotp",
+        "iv",
+        "ciphertext",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/vaultProfiles/{userId}": {
+      "schema": {
+        "$ref": "#/entities/VaultProfile"
+      },
+      "description": "Stores each user's PBKDF2 salt, passphrase verifier, and vault preferences. Strictly restricted to the owning user."
+    },
+    "/vaultProfiles/{userId}/items/{itemId}": {
+      "schema": {
+        "$ref": "#/entities/VaultItem"
+      },
+      "description": "Subcollection of client-side AES-GCM encrypted password vault entries owned by userId."
+    }
+  }
+}

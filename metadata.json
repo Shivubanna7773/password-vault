@@ -1,0 +1,6 @@
+{
+  "name": "Keystone Vault",
+  "description": "Zero-knowledge, end-to-end encrypted password vault built for seamless access across phone and PC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
