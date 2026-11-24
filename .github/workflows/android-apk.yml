@@ -10,6 +10,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Require Firebase Android configuration
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
@@ -21,9 +24,6 @@ jobs:
           mkdir -p android-config
           echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android-config/google-services.json
           node -e "const f=require('./android-config/google-services.json'); const app=f.client?.find(x=>x.client_info?.android_client_info?.package_name==='com.shivubanna7773.keystonevault'); if(!app) { console.error('Wrong Android package in google-services.json'); process.exit(1); }"
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
